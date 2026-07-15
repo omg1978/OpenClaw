@@ -1,0 +1,33 @@
+{
+  "name": "@openclaw/microsoft365-skill",
+  "version": "1.0.0",
+  "description": "Microsoft 365 integration skill for OpenClaw using Microsoft Graph API",
+  "main": "dist/index.js",
+  "bin": {
+    "ms365": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "auth": "tsx src/index.ts auth",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^2.16.2",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.1",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.17.10",
+    "typescript": "^5.7.2",
+    "tsx": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}
