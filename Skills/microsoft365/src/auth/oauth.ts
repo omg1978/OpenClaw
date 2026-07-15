@@ -39,6 +39,7 @@ export class OAuthManager {
 
     console.log("🔐 Starting Microsoft 365 authentication...");
     console.log("📋 Opening browser for authorization...\n");
+    console.log(`🔗 Authorization URL:\n   ${authUrl}\n`);
 
     const authCode = await new Promise<string>((resolve, reject) => {
       const { server, codePromise } = startCallbackServer(
