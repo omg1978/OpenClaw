@@ -3,9 +3,12 @@ import {
   AuthorizationCodeRequest,
   AuthorizationUrlRequest,
   Configuration,
+  AccountInfo,
+  InteractionRequiredAuthError,
+  SilentFlowRequest,
 } from "@azure/msal-node";
 import { AppConfig, getConfig } from "../config";
-import { TokenStore, StoredTokens } from "./tokenStore";
+import { TokenStore, StoredSession } from "./tokenStore";
 import { startCallbackServer } from "../server";
 import open from "open";
 
@@ -13,6 +16,7 @@ export class OAuthManager {
   private msalClient: ConfidentialClientApplication;
   private config: AppConfig;
   private tokenStore: TokenStore;
+  private cacheRestored = false;
 
   constructor() {
     this.config = getConfig();
@@ -29,7 +33,39 @@ export class OAuthManager {
     this.msalClient = new ConfidentialClientApplication(msalConfig);
   }
 
-  async authenticate(): Promise<StoredTokens> {
+  /** Restore MSAL's in-memory cache from our encrypted store on disk. */
+  private async restoreCache(): Promise<StoredSession | null> {
+    if (this.cacheRestored) {
+      return null;
+    }
+    this.cacheRestored = true;
+
+    const session = await this.tokenStore.load();
+    if (session) {
+      this.msalClient
+        .getTokenCache()
+        .deserialize(session.msalCache);
+    }
+    return session;
+  }
+
+  /** Persist MSAL's in-memory cache (which contains refresh tokens) to disk. */
+  private async persistCache(account: AccountInfo): Promise<void> {
+    const msalCache = this.msalClient
+      .getTokenCache()
+      .serialize();
+
+    await this.tokenStore.save({
+      msalCache,
+      account: {
+        homeAccountId: account.homeAccountId,
+        environment: account.environment,
+        username: account.username,
+      },
+    });
+  }
+
+  async authenticate(): Promise<void> {
     const authCodeUrlParams: AuthorizationUrlRequest = {
       scopes: this.config.scopes,
       redirectUri: this.config.redirectUri,
@@ -67,86 +103,80 @@ export class OAuthManager {
 
     const response = await this.msalClient.acquireTokenByCode(tokenRequest);
 
-    if (!response) {
+    if (!response || !response.account) {
       throw new Error("Failed to acquire token. No response from Azure AD.");
     }
 
-    const tokens: StoredTokens = {
-      accessToken: response.accessToken,
-      refreshToken: (response as any).refreshToken || "",
-      expiresAt: response.expiresOn
-        ? response.expiresOn.getTime()
-        : Date.now() + 3600 * 1000,
-      account: response.account
-        ? {
-            homeAccountId: response.account.homeAccountId,
-            environment: response.account.environment,
-            username: response.account.username,
-          }
-        : undefined,
-    };
+    // Persist the full MSAL cache (which now contains the refresh token internally)
+    await this.persistCache(response.account);
 
-    await this.tokenStore.save(tokens);
-    console.log(`✅ Authentication successful! Logged in as: ${response.account?.username || "unknown"}`);
-    console.log(`   Tokens saved to: ${this.config.tokenStorePath}`);
-
-    return tokens;
+    console.log(`✅ Authentication successful! Logged in as: ${response.account.username}`);
+    console.log(`   Token cache saved to: ${this.config.tokenStorePath}`);
   }
 
   async getAccessToken(): Promise<string> {
-    const tokens = await this.tokenStore.load();
+    const session = await this.restoreCache();
 
-    if (!tokens) {
-      throw new Error(
-        "No tokens found. Please run 'npm run auth' first to authenticate."
-      );
+    if (!session) {
+      // restoreCache was already called previously or no session on disk
+      const stored = await this.tokenStore.load();
+      if (!stored) {
+        throw new Error(
+          "No tokens found. Please run 'npm run auth' first to authenticate."
+        );
+      }
+      return this.acquireSilent(stored);
     }
 
-    if (!this.tokenStore.isExpired(tokens)) {
-      return tokens.accessToken;
-    }
-
-    console.log("🔄 Access token expired. Refreshing...");
-    return this.refreshAccessToken(tokens);
+    return this.acquireSilent(session);
   }
 
-  private async refreshAccessToken(tokens: StoredTokens): Promise<string> {
-    try {
-      // Use MSAL's silent token acquisition with refresh token
-      const refreshRequest = {
-        refreshToken: tokens.refreshToken,
-        scopes: this.config.scopes,
-      };
+  private async acquireSilent(session: StoredSession): Promise<string> {
+    // Reconstruct the AccountInfo from stored data so MSAL can look up the cache entry
+    const account = await this.msalClient
+      .getTokenCache()
+      .getAccountByHomeId(session.account.homeAccountId);
 
-      const response =
-        await this.msalClient.acquireTokenByRefreshToken(refreshRequest);
-
-      if (!response) {
-        throw new Error("Token refresh returned no response.");
-      }
-
-      const newTokens: StoredTokens = {
-        accessToken: response.accessToken,
-        refreshToken: (response as any).refreshToken || tokens.refreshToken,
-        expiresAt: response.expiresOn
-          ? response.expiresOn.getTime()
-          : Date.now() + 3600 * 1000,
-        account: tokens.account,
-      };
-
-      await this.tokenStore.save(newTokens);
-      console.log("✅ Token refreshed successfully.");
-      return newTokens.accessToken;
-    } catch (error: any) {
+    if (!account) {
       await this.tokenStore.clear();
       throw new Error(
-        `Token refresh failed: ${error.message}\nPlease re-authenticate with 'npm run auth'.`
+        "Cached account not found in MSAL cache. Please re-authenticate with 'npm run auth'."
       );
+    }
+
+    const silentRequest: SilentFlowRequest = {
+      account,
+      scopes: this.config.scopes,
+      forceRefresh: false,
+    };
+
+    try {
+      // MSAL handles token reuse and automatic refresh internally
+      const response = await this.msalClient.acquireTokenSilent(silentRequest);
+
+      if (!response) {
+        throw new Error("Silent token acquisition returned no response.");
+      }
+
+      // Persist updated cache (MSAL may have refreshed the tokens)
+      await this.persistCache(account);
+
+      return response.accessToken;
+    } catch (error: any) {
+      if (error instanceof InteractionRequiredAuthError) {
+        await this.tokenStore.clear();
+        throw new Error(
+          `Interactive authentication required: ${error.message}\n` +
+          `This can happen due to token revocation, MFA, or conditional access policies.\n` +
+          `Please re-authenticate with 'npm run auth'.`
+        );
+      }
+      throw error;
     }
   }
 
   async logout(): Promise<void> {
     await this.tokenStore.clear();
-    console.log("👋 Logged out. Tokens cleared.");
+    console.log("👋 Logged out. Token cache cleared.");
   }
 }

@@ -2,11 +2,11 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 
-export interface StoredTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number; // Unix timestamp in ms
-  account?: {
+export interface StoredSession {
+  /** Serialized MSAL token cache (contains access, refresh, id tokens internally) */
+  msalCache: string;
+  /** Account identifier needed by acquireTokenSilent */
+  account: {
     homeAccountId: string;
     environment: string;
     username: string;
@@ -26,7 +26,7 @@ export class TokenStore {
     this.filePath = filePath;
   }
 
-  async save(tokens: StoredTokens): Promise<void> {
+  async save(session: StoredSession): Promise<void> {
     const dir = path.dirname(this.filePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -36,7 +36,7 @@ export class TokenStore {
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv("aes-256-cbc", key, iv);
 
-    const json = JSON.stringify(tokens);
+    const json = JSON.stringify(session);
     let encrypted = cipher.update(json, "utf8", "hex");
     encrypted += cipher.final("hex");
 
@@ -48,7 +48,7 @@ export class TokenStore {
     fs.writeFileSync(this.filePath, JSON.stringify(payload, null, 2), "utf8");
   }
 
-  async load(): Promise<StoredTokens | null> {
+  async load(): Promise<StoredSession | null> {
     if (!fs.existsSync(this.filePath)) {
       return null;
     }
@@ -64,7 +64,7 @@ export class TokenStore {
       let decrypted = decipher.update(payload.data, "hex", "utf8");
       decrypted += decipher.final("utf8");
 
-      return JSON.parse(decrypted) as StoredTokens;
+      return JSON.parse(decrypted) as StoredSession;
     } catch {
       console.warn("⚠️  Could not read token store. You may need to re-authenticate.");
       return null;
@@ -75,10 +75,5 @@ export class TokenStore {
     if (fs.existsSync(this.filePath)) {
       fs.unlinkSync(this.filePath);
     }
-  }
-
-  isExpired(tokens: StoredTokens): boolean {
-    // Consider expired 5 minutes before actual expiry
-    return Date.now() >= tokens.expiresAt - 5 * 60 * 1000;
   }
 }
