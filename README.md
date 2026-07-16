@@ -102,3 +102,38 @@ openclaw gateway restart
 - Herramientas peligrosas bloqueadas via `blockedTools`
 - No accede a redes privadas ni localhost sin peticion explicita
 - Configuraciones con secretos excluidas del repositorio via `.gitignore`
+
+### openclaw-microsoft-learn-mcp
+
+Integración con Microsoft Learn MCP para acceder a documentación oficial, ejemplos de código y crear skills especializadas en tecnologías Microsoft.
+
+**Dependencia:** MCPorter (documentado en `openclaw-mcp-tooling/tools/mcporter/`)
+
+**Endpoint:** `https://learn.microsoft.com/api/mcp` (público, sin autenticación)
+
+**Skills incluidas:**
+
+| Skill | Descripción |
+|-------|-------------|
+| `microsoft-docs` | Consulta documentación oficial de Microsoft Learn (arquitectura, configuración, compatibilidad, límites) |
+| `microsoft-code-reference` | Verifica APIs, SDKs, paquetes, firmas y ejemplos de código |
+| `microsoft-skill-creator` | Diseña nuevas skills especializadas en tecnologías Microsoft |
+
+**Herramientas MCP:**
+- `microsoft_docs_search` — Buscar documentación
+- `microsoft_docs_fetch` — Recuperar página completa
+- `microsoft_code_sample_search` — Buscar ejemplos de código oficiales
+
+**Instalación rápida:**
+
+```bash
+cd Skills/openclaw-microsoft-learn-mcp/integrations/microsoft-learn-mcp
+chmod +x install.sh
+./install.sh
+```
+
+**Modelo de seguridad:**
+- No requiere API key ni OAuth
+- No envía secretos ni datos confidenciales al MCP
+- No ejecuta comandos recuperados sin revisión
+- No presenta como actual información no verificada

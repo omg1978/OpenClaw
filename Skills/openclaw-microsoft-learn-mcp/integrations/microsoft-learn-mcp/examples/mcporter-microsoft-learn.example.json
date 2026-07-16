@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mcp-microsoft-learn": {
+      "baseUrl": "https://learn.microsoft.com/api/mcp",
+      "description": "Official Microsoft Learn documentation and code samples"
+    }
+  }
+}

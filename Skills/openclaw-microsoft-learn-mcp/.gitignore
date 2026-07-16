@@ -1,0 +1,22 @@
+# Secrets and runtime configuration
+**/secrets.json
+**/mcporter.json
+.env
+.env.*
+!.env.example
+
+# OpenClaw runtime data
+.openclaw/
+*.sqlite
+*.jsonl
+
+# Backups
+*.bak
+*.backup
+*.before-*
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
