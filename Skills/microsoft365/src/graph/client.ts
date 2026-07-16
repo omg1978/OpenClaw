@@ -31,8 +31,7 @@ export class GraphClient {
       return await request.get();
     } catch (error: any) {
       if (error.statusCode === 401) {
-        // Token might have just expired; force a fresh one and retry once
-        return this.retryWithFreshToken(() => {
+        return this.retryOnce(() => {
           let request = this.client.api(path);
           if (query) {
             for (const [key, value] of Object.entries(query)) {
@@ -51,9 +50,7 @@ export class GraphClient {
       return await this.client.api(path).post(body);
     } catch (error: any) {
       if (error.statusCode === 401) {
-        return this.retryWithFreshToken(() =>
-          this.client.api(path).post(body)
-        );
+        return this.retryOnce(() => this.client.api(path).post(body));
       }
       throw this.formatError(error);
     }
@@ -64,9 +61,7 @@ export class GraphClient {
       return await this.client.api(path).patch(body);
     } catch (error: any) {
       if (error.statusCode === 401) {
-        return this.retryWithFreshToken(() =>
-          this.client.api(path).patch(body)
-        );
+        return this.retryOnce(() => this.client.api(path).patch(body));
       }
       throw this.formatError(error);
     }
@@ -77,30 +72,17 @@ export class GraphClient {
       await this.client.api(path).delete();
     } catch (error: any) {
       if (error.statusCode === 401) {
-        return this.retryWithFreshToken(() =>
-          this.client.api(path).delete()
-        );
+        return this.retryOnce(() => this.client.api(path).delete());
       }
       throw this.formatError(error);
     }
   }
 
-  private async retryWithFreshToken<T>(fn: () => Promise<T>): Promise<T> {
-    // Force a new token by re-authenticating
-    await this.authManager.getAccessToken();
-
-    // Re-init client so authProvider picks up the new token
-    this.client = Client.init({
-      authProvider: async (done) => {
-        try {
-          const token = await this.authManager.getAccessToken();
-          done(null, token);
-        } catch (error: any) {
-          done(error, null);
-        }
-      },
-    });
-
+  /**
+   * On 401, acquireTokenSilent will force-refresh the token via MSAL's
+   * internal cache (which holds the refresh token). Retry the request once.
+   */
+  private async retryOnce<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (error: any) {
