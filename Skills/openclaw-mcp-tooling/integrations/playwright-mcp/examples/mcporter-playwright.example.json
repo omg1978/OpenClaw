@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "mcp-playwright": {
+      "command": "/usr/bin/npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.78",
+        "--config",
+        "/home/USUARIO/.mcporter/playwright-mcp.json"
+      ],
+      "description": "Browser automation using Microsoft Playwright MCP",
+      "blockedTools": [
+        "browser_run_code_unsafe"
+      ]
+    }
+  }
+}
