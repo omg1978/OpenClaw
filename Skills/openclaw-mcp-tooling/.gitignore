@@ -1,0 +1,30 @@
+# Secrets and real runtime configuration
+**/secrets.json
+**/mcporter.json
+.env
+.env.*
+!.env.example
+
+# OpenClaw runtime
+.openclaw/
+*.sqlite
+*.jsonl
+
+# Browser runtime/output
+.playwright-mcp/
+openclaw-browser-output/
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# Backups
+*.bak
+*.backup
+*.before-*
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
